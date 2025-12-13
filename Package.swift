@@ -82,7 +82,13 @@ let package = Package(
           condition: .when(traits: ["StructuredQueriesTagged"])
         ),
       ],
-      exclude: ["Symbolic Links/README.md"]
+      exclude: ["Symbolic Links/README.md"],
+      // NB: Swift 6.3-dev has IRGen crash with opaque types. This workaround disables
+      // round-trip debug type checking that causes the crash.
+      // See: https://github.com/apple/swift/issues/XXXXX (TODO: file bug report)
+      swiftSettings: [
+        .unsafeFlags(["-Xfrontend", "-disable-round-trip-debug-types"]),
+      ]
     ),
     .macro(
       name: "StructuredQueriesMacros",

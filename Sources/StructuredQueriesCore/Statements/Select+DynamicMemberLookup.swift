@@ -1,4 +1,6 @@
-#if compiler(>=6.1)
+// NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+// See: https://github.com/apple/swift/issues/XXXXX (TODO: file bug report)
+#if compiler(>=6.1) && !compiler(>=6.2.3)
   // NB: Using a parameter pack in the dynamic member results in 'EXC_BAD_ACCESS'.
   //     These overloads work around the problem.
   extension Select {

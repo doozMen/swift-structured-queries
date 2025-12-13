@@ -25,17 +25,21 @@ public protocol TableDraft: Table {
 }
 
 extension TableDraft {
-  public static subscript(
-    dynamicMember keyPath: KeyPath<PrimaryTable.Type, some Statement<PrimaryTable>>
-  ) -> some Statement<Self> {
-    SQLQueryExpression("\(PrimaryTable.self[keyPath: keyPath])")
-  }
+  // NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+  #if !compiler(>=6.2.3)
+    public static subscript(
+      dynamicMember keyPath: KeyPath<PrimaryTable.Type, some Statement<PrimaryTable>>
+    ) -> some Statement<Self> {
+      let statement = PrimaryTable.self[keyPath: keyPath]
+      return SQLQueryExpression(statement.query)
+    }
 
-  public static subscript(
-    dynamicMember keyPath: KeyPath<PrimaryTable.Type, some SelectStatementOf<PrimaryTable>>
-  ) -> SelectOf<Self> {
-    unsafeBitCast(PrimaryTable.self[keyPath: keyPath].asSelect(), to: SelectOf<Self>.self)
-  }
+    public static subscript(
+      dynamicMember keyPath: KeyPath<PrimaryTable.Type, some SelectStatementOf<PrimaryTable>>
+    ) -> SelectOf<Self> {
+      unsafeBitCast(PrimaryTable.self[keyPath: keyPath].asSelect(), to: SelectOf<Self>.self)
+    }
+  #endif
 
   public static var all: SelectOf<Self> {
     unsafeBitCast(PrimaryTable.all.asSelect(), to: SelectOf<Self>.self)
@@ -85,217 +89,236 @@ extension PrimaryKeyedTableDefinition where PrimaryColumn: TableColumnExpression
 }
 
 extension PrimaryKeyedTable {
-  /// A where clause filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A `WHERE` clause.
-  public static func find(
-    _ primaryKey: some QueryExpression<PrimaryKey>
-  ) -> Where<Self> {
-    find([primaryKey])
-  }
+  // NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+  #if !compiler(>=6.3)
+    /// A where clause filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A `WHERE` clause.
+    public static func find(
+      _ primaryKey: some QueryExpression<PrimaryKey>
+    ) -> Where<Self> {
+      find([primaryKey])
+    }
 
-  /// A where clause filtered by primary keys.
-  ///
-  /// - Parameter primaryKey: Primary keys identifying table rows.
-  /// - Returns: A `WHERE` clause.
-  public static func find(
-    _ primaryKeys: some Sequence<some QueryExpression<PrimaryKey>>
-  ) -> Where<Self> {
-    Self.where { $0.primaryKey.in(primaryKeys) }
-  }
+    /// A where clause filtered by primary keys.
+    ///
+    /// - Parameter primaryKey: Primary keys identifying table rows.
+    /// - Returns: A `WHERE` clause.
+    public static func find(
+      _ primaryKeys: some Sequence<some QueryExpression<PrimaryKey>>
+    ) -> Where<Self> {
+      Self.where { $0.primaryKey.in(primaryKeys) }
+    }
+  #endif
 
   public var primaryKey: PrimaryKey.QueryOutput {
     self[keyPath: Self.columns.primaryKey.keyPath]
   }
 }
 
-extension TableDraft {
-  /// A where clause filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A `WHERE` clause.
-  public static func find(
-    _ primaryKey: some QueryExpression<PrimaryKey>
-  ) -> Where<Self> {
-    find([primaryKey])
+// NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+#if !compiler(>=6.3)
+  extension TableDraft {
+    /// A where clause filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A `WHERE` clause.
+    public static func find(
+      _ primaryKey: some QueryExpression<PrimaryKey>
+    ) -> Where<Self> {
+      find([primaryKey])
+    }
+
+    /// A where clause filtered by primary keys.
+    ///
+    /// - Parameter primaryKeys: Primary keys identifying table rows.
+    /// - Returns: A `WHERE` clause.
+    public static func find(
+      _ primaryKeys: some Sequence<some QueryExpression<PrimaryKey>>
+    ) -> Where<Self> {
+      Self.where { $0.primaryKey.in(primaryKeys) }
+    }
+  }
+#endif
+
+// NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+#if !compiler(>=6.3)
+  extension Where where From: PrimaryKeyedTable {
+    /// Adds a primary key condition to a where clause.
+    ///
+    /// - Parameter primaryKey: A primary key.
+    /// - Returns: A where clause with the added primary key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
+      find([primaryKey])
+    }
+
+    /// Adds a primary key condition to a where clause.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A where clause with the added primary keys condition.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      Self.where { $0.primaryKey.in(primaryKeys) }
+    }
   }
 
-  /// A where clause filtered by primary keys.
-  ///
-  /// - Parameter primaryKeys: Primary keys identifying table rows.
-  /// - Returns: A `WHERE` clause.
-  public static func find(
-    _ primaryKeys: some Sequence<some QueryExpression<PrimaryKey>>
-  ) -> Where<Self> {
-    Self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
+  extension Where where From: TableDraft {
+    /// Adds a primary key condition to a where clause.
+    ///
+    /// - Parameter primaryKey: A primary key.
+    /// - Returns: A where clause with the added primary key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
+      -> Self
+    {
+      find([primaryKey])
+    }
 
-extension Where where From: PrimaryKeyedTable {
-  /// Adds a primary key condition to a where clause.
-  ///
-  /// - Parameter primaryKey: A primary key.
-  /// - Returns: A where clause with the added primary key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
-    find([primaryKey])
+    /// Adds a primary key condition to a where clause.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A where clause with the added primary keys condition.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      Self.where { $0.primaryKey.in(primaryKeys) }
+    }
   }
+#endif
 
-  /// Adds a primary key condition to a where clause.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A where clause with the added primary keys condition.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    Self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
+// NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+// These extensions depend on the guarded find(_:) methods above.
+#if !compiler(>=6.3)
+  extension Select where From: PrimaryKeyedTable {
+    /// A select statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A select statement filtered by the given key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
+      and(From.find(primaryKey))
+    }
 
-extension Where where From: TableDraft {
-  /// Adds a primary key condition to a where clause.
-  ///
-  /// - Parameter primaryKey: A primary key.
-  /// - Returns: A where clause with the added primary key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
-    -> Self
-  {
-    find([primaryKey])
-  }
-
-  /// Adds a primary key condition to a where clause.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A where clause with the added primary keys condition.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    Self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
-
-extension Select where From: PrimaryKeyedTable {
-  /// A select statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A select statement filtered by the given key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
-    and(From.find(primaryKey))
+    /// A select statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A select statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      and(From.find(primaryKeys))
+    }
   }
 
-  /// A select statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A select statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    and(From.find(primaryKeys))
-  }
-}
+  extension Select where From: TableDraft {
+    /// A select statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A select statement filtered by the given key.
+    public func find(
+      _ primaryKey: some QueryExpression<From.PrimaryKey>
+    ) -> Self {
+      and(From.find(primaryKey))
+    }
 
-extension Select where From: TableDraft {
-  /// A select statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A select statement filtered by the given key.
-  public func find(
-    _ primaryKey: some QueryExpression<From.PrimaryKey>
-  ) -> Self {
-    and(From.find(primaryKey))
+    /// A select statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A select statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      and(From.find(primaryKeys))
+    }
   }
+#endif
 
-  /// A select statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A select statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    and(From.find(primaryKeys))
-  }
-}
+// NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+#if !compiler(>=6.3)
+  extension Update where From: PrimaryKeyedTable {
+    /// An update statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: An update statement filtered by the given key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
+      find([primaryKey])
+    }
 
-extension Update where From: PrimaryKeyedTable {
-  /// An update statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: An update statement filtered by the given key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
-    find([primaryKey])
-  }
-
-  /// An update statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: An update statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
-
-extension Update where From: TableDraft {
-  /// An update statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: An update statement filtered by the given key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
-    -> Self
-  {
-    find([primaryKey])
+    /// An update statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: An update statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      self.where { $0.primaryKey.in(primaryKeys) }
+    }
   }
 
-  /// An update statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: An update statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
+  extension Update where From: TableDraft {
+    /// An update statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: An update statement filtered by the given key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
+      -> Self
+    {
+      find([primaryKey])
+    }
 
-extension Delete where From: PrimaryKeyedTable {
-  /// A delete statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A delete statement filtered by the given key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
-    find([primaryKey])
+    /// An update statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: An update statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      self.where { $0.primaryKey.in(primaryKeys) }
+    }
+  }
+#endif
+
+// NB: Swift 6.3-dev has a compiler crash with closures and opaque type sequences.
+#if !compiler(>=6.3)
+  extension Delete where From: PrimaryKeyedTable {
+    /// A delete statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A delete statement filtered by the given key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>) -> Self {
+      find([primaryKey])
+    }
+
+    /// A delete statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A delete statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      self.where { $0.primaryKey.in(primaryKeys) }
+    }
   }
 
-  /// A delete statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A delete statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
+  extension Delete where From: TableDraft {
+    /// A delete statement filtered by a primary key.
+    ///
+    /// - Parameter primaryKey: A primary key identifying a table row.
+    /// - Returns: A delete statement filtered by the given key.
+    public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
+      -> Self
+    {
+      find([primaryKey])
+    }
 
-extension Delete where From: TableDraft {
-  /// A delete statement filtered by a primary key.
-  ///
-  /// - Parameter primaryKey: A primary key identifying a table row.
-  /// - Returns: A delete statement filtered by the given key.
-  public func find(_ primaryKey: some QueryExpression<From.PrimaryKey>)
-    -> Self
-  {
-    find([primaryKey])
+    /// A delete statement filtered by a sequence of primary keys.
+    ///
+    /// - Parameter primaryKeys: A sequence of primary keys.
+    /// - Returns: A delete statement filtered by the given keys.
+    public func find(
+      _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
+    ) -> Self {
+      self.where { $0.primaryKey.in(primaryKeys) }
+    }
   }
-
-  /// A delete statement filtered by a sequence of primary keys.
-  ///
-  /// - Parameter primaryKeys: A sequence of primary keys.
-  /// - Returns: A delete statement filtered by the given keys.
-  public func find(
-    _ primaryKeys: some Sequence<some QueryExpression<From.PrimaryKey>>
-  ) -> Self {
-    self.where { $0.primaryKey.in(primaryKeys) }
-  }
-}
+#endif
