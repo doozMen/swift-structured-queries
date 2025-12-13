@@ -53,7 +53,9 @@ extension Table {
 /// A `WHERE` clause used to apply a filter to a statement.
 ///
 /// See ``Table/where(_:)`` for how to create this type.
-#if compiler(>=6.1)
+// NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+// See: https://github.com/apple/swift/issues/XXXXX (TODO: file bug report)
+#if compiler(>=6.1) && !compiler(>=6.2.3)
   @dynamicMemberLookup
 #endif
 public struct Where<From: Table>: Sendable {
@@ -69,7 +71,8 @@ public struct Where<From: Table>: Sendable {
     self.scope = scope
   }
 
-  #if compiler(>=6.1)
+  // NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+  #if compiler(>=6.1) && !compiler(>=6.2.3)
     public static subscript(dynamicMember keyPath: KeyPath<From.Type, Self>) -> Self {
       From.self[keyPath: keyPath]
     }

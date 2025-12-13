@@ -314,7 +314,8 @@ public struct _SelectClauses: Sendable {
 /// `Select` type, like `select`, `join`, `group(by:)`, `order(by:)`, and more.
 ///
 /// To learn more, see <doc:SelectStatements>.
-#if compiler(>=6.1)
+// NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+#if compiler(>=6.1) && !compiler(>=6.2.3)
   @dynamicMemberLookup
 #endif
 public struct Select<Columns, From: Table, Joins>: Sendable {
@@ -400,7 +401,8 @@ extension Select {
     self.where = `where`
   }
 
-  #if DEBUG && compiler(>=6.1)
+  // NB: Swift 6.2.3 and 6.3-dev have a compiler crash with metatype key paths in dynamicMemberLookup.
+  #if DEBUG && compiler(>=6.1) && !compiler(>=6.2.3)
     // NB: This can cause 'EXC_BAD_ACCESS' when 'C2' or 'J2' contain parameters.
     // TODO: Report issue to Swift team.
     @available(
@@ -1392,26 +1394,38 @@ extension Select {
   ///
   /// - Parameter grouping: A closure that returns a column to group by from this select's tables.
   /// - Returns: A new select statement that groups by the given column.
-  public func group<C: QueryExpression>(
-    by grouping: (From.TableColumns, Joins.TableColumns) -> C
-  ) -> Self where Joins: Table {
-    _group(by: grouping)
-  }
+  // NB: Swift 6.2.3 and 6.3-dev have both pack expansion issues and ambiguous overload resolution.
+  // These methods are disabled on Swift 6.2.3+ until the compiler stabilizes.
+  // TODO: Re-evaluate when Swift 6.3 stabilizes.
+  #if !compiler(>=6.2.3)
+    public func group<C: QueryExpression>(
+      by grouping: (From.TableColumns, Joins.TableColumns) -> C
+    ) -> Self where Joins: Table {
+      var select = self
+      select.group.append(grouping(From.columns, Joins.columns).queryFragment)
+      return select
+    }
 
-  /// Creates a new select statement from this one by appending the given columns to its `GROUP BY`
-  /// clause.
-  ///
-  /// - Parameter grouping: A closure that returns a column to group by from this select's tables.
-  /// - Returns: A new select statement that groups by the given column.
-  public func group<
-    C1: QueryExpression,
-    C2: QueryExpression,
-    each C3: QueryExpression
-  >(
-    by grouping: (From.TableColumns, Joins.TableColumns) -> (C1, C2, repeat each C3)
-  ) -> Self where Joins: Table {
-    _group(by: grouping)
-  }
+    /// Creates a new select statement from this one by appending the given columns to its `GROUP BY`
+    /// clause.
+    ///
+    /// - Parameter grouping: A closure that returns a column to group by from this select's tables.
+    /// - Returns: A new select statement that groups by the given column.
+    public func group<
+      C1: QueryExpression,
+      C2: QueryExpression,
+      each C3: QueryExpression
+    >(
+      by grouping: (From.TableColumns, Joins.TableColumns) -> (C1, C2, repeat each C3)
+    ) -> Self where Joins: Table {
+      var select = self
+      let (c1, c2, rest) = grouping(From.columns, Joins.columns)
+      select.group.append(c1.queryFragment)
+      select.group.append(c2.queryFragment)
+      repeat select.group.append((each rest).queryFragment)
+      return select
+    }
+  #endif
 
   private func _group<
     each C: QueryExpression,
